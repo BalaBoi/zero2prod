@@ -5,6 +5,7 @@ use sqlx::PgConnection;
 use crate::routes::{health_check, subscribe};
 
 pub fn run(listener: TcpListener, database_connection: PgConnection) -> Result<Server, std::io::Error> {
+    //creates an arc so that all the workers of the server can access the database
     let connection = web::Data::new(database_connection);
     let server = HttpServer::new(move|| {
         App::new()

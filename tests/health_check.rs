@@ -1,7 +1,25 @@
-use std::net::TcpListener;
+use once_cell::sync::Lazy;
+use secrecy::ExposeSecret;
 use sqlx::{Executor, PgPool};
+use std::net::TcpListener;
 use uuid::Uuid;
-use zer02prod::configuration::{get_configuration, DatabaseSettings};
+use zer02prod::{
+    configuration::{get_configuration, DatabaseSettings},
+    telemetry::{get_subscriber, init_subscriber},
+};
+
+static TRACING: Lazy<()> = Lazy::new(|| {
+    match std::env::var("TEST_LOG") {
+        Ok(_) => {
+            let subscriber = get_subscriber("zero2prod".into(), "debug".into(), std::io::stdout);
+            init_subscriber(subscriber);
+        }
+        Err(_) => {
+            let subscriber = get_subscriber("zero2prod".into(), "debug".into(), std::io::sink);
+            init_subscriber(subscriber);
+        }
+    };
+});
 
 pub struct TestApp {
     address: String,
@@ -26,7 +44,7 @@ async fn health_check_works() {
 #[tokio::test]
 async fn valid_subscribe_returns_200() {
     let test_app = spawn_app().await;
-    
+
     let client = reqwest::Client::new();
 
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
@@ -80,31 +98,33 @@ async fn missing_data_subscribe_returns_400() {
 }
 
 async fn spawn_app() -> TestApp {
+    Lazy::force(&TRACING);
+
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind to random port");
     let port = listener.local_addr().unwrap().port();
     let address = format!("http://127.0.0.1:{}", port);
-    
-    let mut db_config = get_configuration().expect("Couldn't read configuration file").database_settings;
+
+    let mut db_config = get_configuration()
+        .expect("Couldn't read configuration file")
+        .database_settings;
     db_config.database_name = Uuid::new_v4().to_string();
     let db_pool = configure_database(&db_config).await;
-    let server = zer02prod::startup::run(listener, db_pool.clone()).expect("Failed to bind address");
+    let server =
+        zer02prod::startup::run(listener, db_pool.clone()).expect("Failed to bind address");
     let _ = tokio::spawn(server);
 
-    TestApp {
-        address,
-        db_pool,
-    }
+    TestApp { address, db_pool }
 }
 
 pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
-    PgPool::connect(&config.connection_string_without_db())
+    PgPool::connect(&config.connection_string_without_db().expose_secret())
         .await
         .expect("Failed to connect to postgres")
         .execute(format!(r#"CREATE DATABASE "{}";"#, config.database_name).as_str())
         .await
         .expect("Couldn't create a new test database");
 
-    let connection_pool = PgPool::connect(&config.connection_string())
+    let connection_pool = PgPool::connect(&config.connection_string().expose_secret())
         .await
         .expect("Failed connect to postgres");
 

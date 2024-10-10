@@ -3,8 +3,9 @@ use secrecy::ExposeSecret;
 use sqlx::{Executor, PgPool};
 use std::net::TcpListener;
 use uuid::Uuid;
-use zer02prod::{
+use zero2prod::{
     configuration::{get_configuration, DatabaseSettings},
+    startup,
     telemetry::{get_subscriber, init_subscriber},
 };
 
@@ -109,8 +110,7 @@ async fn spawn_app() -> TestApp {
         .database_settings;
     db_config.database_name = Uuid::new_v4().to_string();
     let db_pool = configure_database(&db_config).await;
-    let server =
-        zer02prod::startup::run(listener, db_pool.clone()).expect("Failed to bind address");
+    let server = startup::run(listener, db_pool.clone()).expect("Failed to bind address");
     let _ = tokio::spawn(server);
 
     TestApp { address, db_pool }

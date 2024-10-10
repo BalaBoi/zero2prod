@@ -1,5 +1,5 @@
 [package]
-name = "zer02prod"
+name = "zero2prod"
 version = "0.1.0"
 edition = "2021"
 
@@ -35,7 +35,7 @@ features = [
     "postgres",
     "uuid",
     "chrono",
-    "migrate"
+    "migrate",
 ]
 
 [dev-dependencies]

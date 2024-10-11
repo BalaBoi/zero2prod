@@ -32,7 +32,7 @@ async fn health_check_works() {
     let client = reqwest::Client::new();
 
     let response = client
-        .get(&format!("{}/health_check", test_app.address))
+        .get(format!("{}/health_check", test_app.address))
         .send()
         .await
         .expect("Failed to execute request");
@@ -50,7 +50,7 @@ async fn valid_subscribe_returns_200() {
     let body = "name=le%20guin&email=ursula_le_guin%40gmail.com";
 
     let response = client
-        .post(&format!("{}/subscriptions", test_app.address))
+        .post(format!("{}/subscriptions", test_app.address))
         .header("Content-Type", "application/x-www-form-urlencoded")
         .body(body)
         .send()
@@ -81,7 +81,7 @@ async fn missing_data_subscribe_returns_400() {
 
     for (invalid_body, error_message) in test_cases {
         let response = client
-            .post(&format!("{}/subscriptions", test_app.address))
+            .post(format!("{}/subscriptions", test_app.address))
             .header("Content-Type", "application/x-www-form-urlencoded")
             .body(invalid_body)
             .send()
@@ -93,6 +93,35 @@ async fn missing_data_subscribe_returns_400() {
             response.status().as_u16(),
             "The API did not fail with 400 Bad Request when the payload was {}.",
             error_message
+        );
+    }
+}
+
+#[tokio::test]
+async fn subscribe_returns_400_when_fields_are_present_but_invalid() {
+    let test_app = spawn_app().await;
+    let client = reqwest::Client::new();
+
+    let test_cases = vec![
+        ("name=&email=ursula_le_guin%40gmail.com", "empty name"),
+        ("name=Ursula&email=", "empty email"),
+        ("name=Ursula&email=definitely-not-an-email", "invalid email"),
+    ];
+
+    for (body, description) in test_cases {
+        let response = client
+            .post(format!("{}/subscriptions", test_app.address))
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(body)
+            .send()
+            .await
+            .expect("Failed to execute request");
+
+        assert_eq!(
+            400,
+            response.status().as_u16(),
+            "The API did not return a 400 when the payload was {}.",
+            description
         );
     }
 }
@@ -110,7 +139,7 @@ async fn spawn_app() -> TestApp {
     db_config.database_name = Uuid::new_v4().to_string();
     let db_pool = configure_database(&db_config).await;
     let server = startup::run(listener, db_pool.clone()).expect("Failed to bind address");
-    let _ = tokio::spawn(server);
+    std::mem::drop(tokio::spawn(server));
 
     TestApp { address, db_pool }
 }

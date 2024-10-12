@@ -15,7 +15,7 @@ impl SubscriberName {
         if s.graphemes(true).count() > 256 {
             return Err("subscriber name is too long".into());
         }
-        
+
         let forbidden_characters = ['/', '(', ')', '"', '<', '>', '\\', '{', '}'];
         if s.chars().any(|char| forbidden_characters.contains(&char)) {
             return Err("subscriber name contains invalid characters".into());

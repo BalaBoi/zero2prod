@@ -44,7 +44,12 @@ features = [
     "migrate",
 ]
 
+[dependencies.reqwest]
+version = "0.12"
+default-features = false
+features = ["json", "rustls-tls"]
+
 [dev-dependencies]
-reqwest = "0.12.7"
 claim = "0.5"
 fake = "2"
+wiremock = "0.6"

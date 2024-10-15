@@ -2,3 +2,6 @@ application_settings:
   host: 0.0.0.0
 database_settings:
   require_ssl: true
+email_client_settings:
+  base_url: "https://api.sendgrid.com"
+  sender_email: "sanjay.krishnan456@gmail.com"

@@ -4,6 +4,7 @@ use std::net::TcpListener;
 use uuid::Uuid;
 use zero2prod::{
     configuration::{get_configuration, DatabaseSettings},
+    email_client::EmailClient,
     startup,
     telemetry::{get_subscriber, init_subscriber},
 };
@@ -133,12 +134,25 @@ async fn spawn_app() -> TestApp {
     let port = listener.local_addr().unwrap().port();
     let address = format!("http://127.0.0.1:{}", port);
 
-    let mut db_config = get_configuration()
-        .expect("Couldn't read configuration file")
-        .database_settings;
-    db_config.database_name = Uuid::new_v4().to_string();
-    let db_pool = configure_database(&db_config).await;
-    let server = startup::run(listener, db_pool.clone()).expect("Failed to bind address");
+    let mut config = get_configuration().expect("Couldn't read configuration file");
+
+    config.database_settings.database_name = Uuid::new_v4().to_string();
+    let db_pool = configure_database(&config.database_settings).await;
+
+    let sender_email = config
+        .email_client_settings
+        .sender()
+        .expect("Invalid sender email address");
+    let email_client = EmailClient::new(
+        &config.email_client_settings.base_url,
+        sender_email,
+        &config.email_client_settings.authorization_token,
+        config.email_client_settings.timeout()
+    );
+
+    let server =
+        startup::run(listener, db_pool.clone(), email_client).expect("Failed to bind address");
+
     std::mem::drop(tokio::spawn(server));
 
     TestApp { address, db_pool }

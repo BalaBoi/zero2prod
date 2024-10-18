@@ -15,12 +15,9 @@ impl EmailClient {
         base_url: &str,
         sender: SubscriberEmail,
         authorization_token: &SecretString,
-        timeout: std::time::Duration
+        timeout: std::time::Duration,
     ) -> Self {
-        let client = Client::builder()
-            .timeout(timeout)
-            .build()
-            .unwrap();
+        let client = Client::builder().timeout(timeout).build().unwrap();
         Self {
             http_client: client,
             base_url: base_url.to_owned(),
@@ -31,7 +28,7 @@ impl EmailClient {
 
     pub async fn send_email(
         &self,
-        recipient: SubscriberEmail,
+        recipient: &SubscriberEmail,
         subject: &str,
         html_content: &str,
         text_content: &str,
@@ -80,7 +77,8 @@ mod tests {
     use claim::{assert_err, assert_ok};
     use fake::{
         faker::{
-            internet::en::SafeEmail, lorem::en::{Paragraph, Sentence}
+            internet::en::SafeEmail,
+            lorem::en::{Paragraph, Sentence},
         },
         Fake, Faker,
     };
@@ -100,7 +98,12 @@ mod tests {
     }
 
     fn email_client(base_url: &str) -> EmailClient {
-        EmailClient::new(base_url, email(), &SecretString::new(Faker.fake::<String>().into_boxed_str()), std::time::Duration::from_millis(200))
+        EmailClient::new(
+            base_url,
+            email(),
+            &SecretString::new(Faker.fake::<String>().into_boxed_str()),
+            std::time::Duration::from_millis(200),
+        )
     }
 
     #[tokio::test]
@@ -115,7 +118,7 @@ mod tests {
             .await;
 
         let out = email_client
-            .send_email(email(), &subject(), &content(), &content())
+            .send_email(&email(), &subject(), &content(), &content())
             .await;
 
         assert_ok!(out);
@@ -133,7 +136,7 @@ mod tests {
             .await;
 
         let out = email_client
-            .send_email(email(), &subject(), &content(), &content())
+            .send_email(&email(), &subject(), &content(), &content())
             .await;
 
         assert_err!(out);
@@ -152,7 +155,7 @@ mod tests {
             .await;
 
         let out = email_client
-            .send_email(email(), &subject(), &content(), &content())
+            .send_email(&email(), &subject(), &content(), &content())
             .await;
 
         assert_err!(out);

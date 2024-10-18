@@ -19,6 +19,7 @@ pub struct ApplicationSetting {
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub port: u16,
     pub host: String,
+    pub base_url: String,
 }
 
 #[derive(Deserialize)]

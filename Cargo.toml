@@ -53,3 +53,4 @@ features = ["json", "rustls-tls"]
 claim = "0.5"
 fake = "2"
 wiremock = "0.6"
+linkify = "0.10"

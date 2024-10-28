@@ -1,3 +1,4 @@
+use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
 use once_cell::sync::Lazy;
 use sqlx::{Connection, Executor, PgConnection, PgPool};
 use uuid::Uuid;
@@ -26,6 +27,7 @@ pub struct TestApp {
     pub db_pool: PgPool,
     pub email_server: MockServer,
     pub port: u16,
+    pub test_user: TestUser,
 }
 
 pub struct ConfirmationLinks {
@@ -42,6 +44,50 @@ impl TestApp {
             .send()
             .await
             .expect("Failed to execute request")
+    }
+
+    pub async fn post_newsletters(&self, body: &serde_json::Value) -> reqwest::Response {
+        reqwest::Client::new()
+            .post(format!("{}/newsletters", self.address))
+            .basic_auth(&self.test_user.username, Some(&self.test_user.password))
+            .json(body)
+            .send()
+            .await
+            .expect("Failed to execute request")
+    }
+}
+
+pub struct TestUser {
+    user_id: Uuid,
+    username: String,
+    password: String,
+}
+
+impl TestUser {
+    async fn generate(pool: &PgPool) -> Self {
+        let this = Self {
+            user_id: Uuid::new_v4(),
+            username: Uuid::new_v4().to_string(),
+            password: Uuid::new_v4().to_string(),
+        };
+        let salt = SaltString::generate(&mut rand::thread_rng());
+        let password_hash = Argon2::default()
+            .hash_password(this.password.as_bytes(), &salt)
+            .unwrap()
+            .to_string();
+        sqlx::query!(
+            r#"
+            INSERT INTO users (user_id, username, password_hash)
+            VALUES ($1, $2, $3)
+            "#,
+            &this.user_id,
+            &this.username,
+            &password_hash
+        )
+        .execute(pool)
+        .await
+        .expect("Failed to create test users");
+        this
     }
 }
 
@@ -64,11 +110,14 @@ pub async fn spawn_app() -> TestApp {
     let application_port = application.port();
     std::mem::drop(tokio::spawn(application.run_until_stopped()));
 
+    let pool = get_connection_pool(&settings.database_settings);
+    let test_user = TestUser::generate(&pool).await;
     TestApp {
         address: format!("http://127.0.0.1:{}", application_port),
-        db_pool: get_connection_pool(&settings.database_settings),
+        db_pool: pool,
         email_server,
         port: application_port,
+        test_user,
     }
 }
 

@@ -9,13 +9,14 @@ use crate::domain::SubscriberEmail;
 
 #[derive(Deserialize)]
 pub struct Settings {
-    pub application_settings: ApplicationSetting,
+    pub application_settings: ApplicationSettings,
     pub database_settings: DatabaseSettings,
     pub email_client_settings: EmailClientSettings,
+    pub redis_uri: SecretString,
 }
 
 #[derive(Deserialize)]
-pub struct ApplicationSetting {
+pub struct ApplicationSettings {
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub port: u16,
     pub host: String,

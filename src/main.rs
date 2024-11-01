@@ -1,7 +1,7 @@
 use zero2prod::{configuration::get_configuration, startup::Application, telemetry::*};
 
 #[tokio::main]
-async fn main() -> Result<(), std::io::Error> {
+async fn main() -> Result<(), anyhow::Error> {
     init_subscriber(get_subscriber(
         "zero2prod".into(),
         "info".into(),
@@ -10,7 +10,7 @@ async fn main() -> Result<(), std::io::Error> {
 
     let config = get_configuration().expect("Failed to read configuration");
 
-    let application = Application::build(&config)?;
+    let application = Application::build(&config).await?;
     application.run_until_stopped().await?;
     Ok(())
 }

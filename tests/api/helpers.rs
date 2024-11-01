@@ -28,6 +28,7 @@ pub struct TestApp {
     pub email_server: MockServer,
     pub port: u16,
     pub test_user: TestUser,
+    pub api_client: reqwest::Client,
 }
 
 pub struct ConfirmationLinks {
@@ -37,7 +38,7 @@ pub struct ConfirmationLinks {
 
 impl TestApp {
     pub async fn post_subscription<B: Into<reqwest::Body>>(&self, body: B) -> reqwest::Response {
-        reqwest::Client::new()
+        self.api_client
             .post(format!("{}/subscriptions", self.address))
             .header("Content-Type", "application/x-www-form-urlencoded")
             .body(body)
@@ -47,7 +48,7 @@ impl TestApp {
     }
 
     pub async fn post_newsletters(&self, body: &serde_json::Value) -> reqwest::Response {
-        reqwest::Client::new()
+        self.api_client
             .post(format!("{}/newsletters", self.address))
             .basic_auth(&self.test_user.username, Some(&self.test_user.password))
             .json(body)
@@ -55,12 +56,32 @@ impl TestApp {
             .await
             .expect("Failed to execute request")
     }
+
+    pub async fn post_login<B: serde::Serialize>(&self, body: &B) -> reqwest::Response {
+        self.api_client
+            .post(format!("{}/login", self.address))
+            .form(body)
+            .send()
+            .await
+            .expect("Failed to execute request")
+    }
+
+    pub async fn get_login_html(&self) -> String {
+        self.api_client
+            .get(format!("{}/login", self.address))
+            .send()
+            .await
+            .expect("Failed to execute request")
+            .text()
+            .await
+            .unwrap()
+    }
 }
 
 pub struct TestUser {
-    user_id: Uuid,
-    username: String,
-    password: String,
+    pub user_id: Uuid,
+    pub username: String,
+    pub password: String,
 }
 
 impl TestUser {
@@ -106,7 +127,7 @@ pub async fn spawn_app() -> TestApp {
 
     configure_database(&settings.database_settings).await;
 
-    let application = Application::build(&settings).expect("Failed to build application");
+    let application = Application::build(&settings).await.expect("Failed to build application");
     let application_port = application.port();
     std::mem::drop(tokio::spawn(application.run_until_stopped()));
 
@@ -118,6 +139,11 @@ pub async fn spawn_app() -> TestApp {
         email_server,
         port: application_port,
         test_user,
+        api_client: reqwest::Client::builder()
+            .cookie_store(true)
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap(),
     }
 }
 
@@ -163,4 +189,9 @@ pub fn get_confirmation_links(email_request: &wiremock::Request, port: u16) -> C
         html,
         text: plain_text,
     }
+}
+
+pub fn assert_is_redirect_to(response: &reqwest::Response, location: &str) {
+    assert_eq!(response.status().as_u16(), 303);
+    assert_eq!(response.headers().get("Location").unwrap(), location);
 }

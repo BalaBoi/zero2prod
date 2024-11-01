@@ -1,4 +1,5 @@
 use crate::helpers::{get_confirmation_links, spawn_app, ConfirmationLinks, TestApp};
+use uuid::Uuid;
 use wiremock::{
     matchers::{any, method, path},
     Mock, ResponseTemplate,
@@ -105,6 +106,64 @@ async fn requests_missing_authorization_are_rejected() {
     assert_eq!(
         r#"Basic realm="publish""#,
         response.headers()["WWW-Authenticate"]
+    );
+}
+
+#[tokio::test]
+async fn non_existing_user_is_rejected() {
+    let test_app = spawn_app().await;
+
+    let username = Uuid::new_v4();
+    let password = Uuid::new_v4();
+
+    let body = serde_json::json!({
+        "title": "Newsletter title",
+        "content": {
+            "text": "newsletter body as text",
+            "html": "<p>Newsletter body as html</p>"
+        }
+    });
+    let response = reqwest::Client::new()
+        .post(format!("{}/newsletters", test_app.address))
+        .basic_auth(username, Some(password))
+        .json(&body)
+        .send()
+        .await
+        .expect("Failed to execute request");
+
+    assert_eq!(response.status().as_u16(), 401);
+    assert_eq!(
+        response.headers()["WWW-Authenticate"],
+        r#"Basic realm="publish""#
+    );
+}
+
+#[tokio::test]
+async fn invalid_password_is_rejected() {
+    let test_app = spawn_app().await;
+
+    let password = Uuid::new_v4();
+    assert_ne!(test_app.test_user.password, password.to_string());
+
+    let body = serde_json::json!({
+        "title": "Newsletter title",
+        "content": {
+            "text": "newsletter body as text",
+            "html": "<p>Newsletter body as html</p>"
+        }
+    });
+    let response = reqwest::Client::new()
+        .post(format!("{}/newsletters", test_app.address))
+        .basic_auth(test_app.test_user.username, Some(password))
+        .json(&body)
+        .send()
+        .await
+        .expect("Failed to execute request");
+
+    assert_eq!(response.status().as_u16(), 401);
+    assert_eq!(
+        response.headers()["WWW-Authenticate"],
+        r#"Basic realm="publish""#
     );
 }
 

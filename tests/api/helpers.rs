@@ -56,15 +56,13 @@ impl TestApp {
     }
 
     pub async fn get_publish_newsletter_html(&self) -> String {
-        self
-            .get_publish_newsletter()
-            .await
-            .text()
-            .await
-            .unwrap()
+        self.get_publish_newsletter().await.text().await.unwrap()
     }
 
-    pub async fn post_publish_newsletters<B: serde::Serialize>(&self, body: &B) -> reqwest::Response {
+    pub async fn post_publish_newsletters<B: serde::Serialize>(
+        &self,
+        body: &B,
+    ) -> reqwest::Response {
         self.api_client
             .post(format!("{}/admin/newsletters", self.address))
             .form(body)
@@ -78,7 +76,7 @@ impl TestApp {
             "username": &self.test_user.username,
             "password": &self.test_user.password,
         });
-    
+
         _ = self.post_login(&login_body).await;
     }
 

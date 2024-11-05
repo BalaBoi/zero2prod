@@ -9,6 +9,13 @@ where
     actix_web::error::ErrorInternalServerError(error)
 }
 
+pub fn e400<T>(error: T) -> actix_web::Error
+where
+    T: Debug + Display + 'static,
+{
+    actix_web::error::ErrorBadRequest(error)
+}
+
 pub fn see_other(location: &str) -> HttpResponse {
     HttpResponse::SeeOther()
         .insert_header((LOCATION, location))

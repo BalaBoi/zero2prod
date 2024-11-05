@@ -1,4 +1,8 @@
-use crate::helpers::{assert_is_redirect_to, get_confirmation_links, spawn_app, ConfirmationLinks, TestApp};
+use std::time::Duration;
+
+use crate::helpers::{
+    assert_is_redirect_to, get_confirmation_links, spawn_app, ConfirmationLinks, TestApp,
+};
 use uuid::Uuid;
 use wiremock::{
     matchers::{any, method, path},
@@ -21,10 +25,13 @@ async fn newsletters_are_not_delivered_to_unconfirmed_subscribers() {
         "title": "Newsletter title",
         "text": "Newsletter body as plain text",
         "html": "<p>Newsletter body as HTML</p>",
+        "idempotency_key": Uuid::new_v4().to_string()
     });
-    let response = test_app.post_publish_newsletters(&newsletter_request_body).await;
+    let response = test_app
+        .post_publish_newsletters(&newsletter_request_body)
+        .await;
     assert_is_redirect_to(&response, "/admin/newsletters");
-    
+
     let html_page = test_app.get_publish_newsletter_html().await;
     assert!(html_page.contains("The newsletter issue has been published"));
 }
@@ -41,15 +48,18 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
         .expect(1)
         .mount(&test_app.email_server)
         .await;
-    
+
     let newsletter_request_body = serde_json::json!({
         "title": "Newsletter title",
         "text": "Newsletter body as plain text",
         "html": "<p>Newsletter body as HTML</p>",
+        "idempotency_key": Uuid::new_v4().to_string()
     });
-    let response = test_app.post_publish_newsletters(&newsletter_request_body).await;
+    let response = test_app
+        .post_publish_newsletters(&newsletter_request_body)
+        .await;
     assert_is_redirect_to(&response, "/admin/newsletters");
-    
+
     let html_page = test_app.get_publish_newsletter_html().await;
     assert!(html_page.contains("The newsletter issue has been published"));
 }
@@ -57,15 +67,14 @@ async fn newsletters_are_delivered_to_confirmed_subscribers() {
 #[tokio::test]
 async fn newsletters_returns_400_for_invalid_data() {
     let test_app = spawn_app().await;
-    
+
     test_app.test_user_login().await;
-    
+
     let test_cases = vec![
         (
             serde_json::json!({
                 "text": "random email newsletter text",
                 "html": "<p>Newsletter body as html</p>",
-                
             }),
             "missing the title",
         ),
@@ -94,7 +103,7 @@ async fn you_must_be_logged_in_to_see_the_newsletter_form() {
     let test_app = spawn_app().await;
 
     let response = test_app.get_publish_newsletter().await;
-    
+
     assert_is_redirect_to(&response, "/login");
 }
 
@@ -111,11 +120,12 @@ async fn non_existing_user_is_rejected() {
     });
     let response = test_app.post_login(&login_body).await;
     assert_is_redirect_to(&response, "/login");
-    
+
     let body = serde_json::json!({
         "title": "Newsletter title",
         "text": "newsletter body as text",
-        "html": "<p>Newsletter body as html</p>"
+        "html": "<p>Newsletter body as html</p>",
+        "idempotency_key": Uuid::new_v4().to_string()
     });
     let response = test_app.post_publish_newsletters(&body).await;
     assert_is_redirect_to(&response, "/login");
@@ -137,8 +147,8 @@ async fn invalid_password_is_rejected() {
     let body = serde_json::json!({
         "title": "Newsletter title",
         "text": "newsletter body as text",
-        "html": "<p>Newsletter body as html</p>"
-        
+        "html": "<p>Newsletter body as html</p>",
+        "idempotency_key": Uuid::new_v4().to_string()
     });
     let response = test_app.post_publish_newsletters(&body).await;
     assert_is_redirect_to(&response, "/login");
@@ -175,4 +185,70 @@ async fn create_confirmed_subscriber(test_app: &TestApp) {
         .unwrap()
         .error_for_status()
         .unwrap();
+}
+
+#[tokio::test]
+async fn newsletter_creation_is_idempotent() {
+    let test_app = spawn_app().await;
+    create_confirmed_subscriber(&test_app).await;
+    test_app.test_user_login().await;
+
+    Mock::given(path("/v3/mail/send"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1) //Only send a single api request to email server as requests are retries
+        .mount(&test_app.email_server)
+        .await;
+
+    let newsletter_request_body = serde_json::json!({
+        "title": "Newsletter title",
+        "text": "Newsletter body as plain text",
+        "html": "<p>Newsletter body as html</p>",
+        "idempotency_key": Uuid::new_v4().to_string()
+    });
+
+    let response = test_app
+        .post_publish_newsletters(&newsletter_request_body)
+        .await;
+    assert_is_redirect_to(&response, "/admin/newsletters");
+
+    let html_page = test_app.get_publish_newsletter_html().await;
+    assert!(html_page.contains("The newsletter issue has been published!"));
+
+    let response = test_app
+        .post_publish_newsletters(&newsletter_request_body)
+        .await;
+    assert_is_redirect_to(&response, "/admin/newsletters");
+
+    let html_page = test_app.get_publish_newsletter_html().await;
+    assert!(html_page.contains("The newsletter issue has been published!"));
+}
+
+#[tokio::test]
+async fn concurrent_form_submission_is_handled_gracefully() {
+    let test_app = spawn_app().await;
+    create_confirmed_subscriber(&test_app).await;
+    test_app.test_user_login().await;
+
+    Mock::given(path("v3/mail/send"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(2)))
+        .expect(1)
+        .mount(&test_app.email_server)
+        .await;
+
+    let newsletter_request_body = serde_json::json!({
+        "title": "Newsletter title",
+        "text": "Newsletter body as plain text",
+        "html": "<p>Newsletter body as html</p>",
+        "idempotency_key": Uuid::new_v4().to_string()
+    });
+    let response1 =  test_app.post_publish_newsletters(&newsletter_request_body);
+    let response2 = test_app.post_publish_newsletters(&newsletter_request_body);
+    
+    let (response1, response2) = tokio::join!(response1, response2);
+
+    assert_eq!(response1.status(), response2.status());
+    assert_eq!(response1.text().await.unwrap(), response2.text().await.unwrap());
+
 }

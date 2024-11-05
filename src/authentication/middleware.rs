@@ -1,10 +1,19 @@
 use std::{fmt, ops::Deref};
 
-use actix_web::{body::MessageBody, dev::{ServiceRequest, ServiceResponse}, error::InternalError, middleware::Next, FromRequest, HttpMessage};
+use actix_web::{
+    body::MessageBody,
+    dev::{ServiceRequest, ServiceResponse},
+    error::InternalError,
+    middleware::Next,
+    FromRequest, HttpMessage,
+};
 use anyhow::anyhow;
 use uuid::Uuid;
 
-use crate::{session_state::TypedSession, utils::{e500, see_other}};
+use crate::{
+    session_state::TypedSession,
+    utils::{e500, see_other},
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct UserId(Uuid);
@@ -25,7 +34,7 @@ impl Deref for UserId {
 
 pub async fn reject_anonymous_users(
     mut req: ServiceRequest,
-    next: Next<impl MessageBody>
+    next: Next<impl MessageBody>,
 ) -> Result<ServiceResponse<impl MessageBody>, actix_web::Error> {
     let session = {
         let (http_req, payload) = req.parts_mut();
@@ -36,11 +45,11 @@ pub async fn reject_anonymous_users(
         Some(user_id) => {
             req.extensions_mut().insert(UserId(user_id));
             next.call(req).await
-        },
+        }
         None => {
             let response = see_other("/login");
             let error = anyhow!("The user has not logged in");
             Err(InternalError::from_response(error, response).into())
-        },
+        }
     }
 }

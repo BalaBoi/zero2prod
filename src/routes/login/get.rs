@@ -4,7 +4,7 @@ use std::fmt::Write;
 
 pub async fn login_form(flash_messages: IncomingFlashMessages) -> HttpResponse {
     let mut fm_html = String::new();
-    
+
     for msg in flash_messages.iter() {
         writeln!(fm_html, "<p><i>{}</i></p>", msg.content()).unwrap();
     }

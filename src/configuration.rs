@@ -6,8 +6,9 @@ use sqlx::postgres::{PgConnectOptions, PgSslMode};
 use sqlx::ConnectOptions;
 
 use crate::domain::SubscriberEmail;
+use crate::email_client::EmailClient;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct Settings {
     pub application_settings: ApplicationSettings,
     pub database_settings: DatabaseSettings,
@@ -15,7 +16,7 @@ pub struct Settings {
     pub redis_uri: SecretString,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct ApplicationSettings {
     #[serde(deserialize_with = "deserialize_number_from_string")]
     pub port: u16,
@@ -23,7 +24,7 @@ pub struct ApplicationSettings {
     pub base_url: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct DatabaseSettings {
     pub username: String,
     pub password: SecretString,
@@ -34,7 +35,7 @@ pub struct DatabaseSettings {
     pub require_ssl: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct EmailClientSettings {
     pub base_url: String,
     pub sender_email: String,
@@ -86,6 +87,17 @@ pub fn get_configuration() -> Result<Settings, config::ConfigError> {
 }
 
 impl EmailClientSettings {
+    pub fn client(self) -> EmailClient {
+        let sender_email = self.sender().expect("Invalid sender email address");
+        let timeout = self.timeout();
+        EmailClient::new(
+            &self.base_url,
+            sender_email,
+            &self.authorization_token,
+            timeout
+        )
+    }
+    
     pub fn sender(&self) -> Result<SubscriberEmail, String> {
         SubscriberEmail::parse(&self.sender_email)
     }

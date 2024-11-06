@@ -1,5 +1,5 @@
 use actix_web::{body::to_bytes, http::StatusCode, HttpResponse, HttpResponseBuilder};
-use sqlx::{PgPool, Postgres, Transaction, Executor};
+use sqlx::{Executor, PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 use super::IdempotencyKey;
@@ -81,9 +81,7 @@ pub async fn save_response(
         headers,
         body.as_ref()
     );
-    transaction
-        .execute(query)
-        .await?;
+    transaction.execute(query).await?;
     transaction.commit().await?;
 
     let http_response = response_head.set_body(body).map_into_boxed_body();
@@ -92,13 +90,13 @@ pub async fn save_response(
 
 pub enum NextAction {
     StartProcessing(Transaction<'static, Postgres>),
-    ReturnSavedResponse(HttpResponse)
+    ReturnSavedResponse(HttpResponse),
 }
 
 pub async fn try_processing(
     pool: &PgPool,
     idempotency_key: &IdempotencyKey,
-    user_id: Uuid 
+    user_id: Uuid,
 ) -> Result<NextAction, anyhow::Error> {
     let mut transaction = pool.begin().await?;
     let query = sqlx::query!(
@@ -114,18 +112,13 @@ pub async fn try_processing(
         user_id,
         idempotency_key.as_ref()
     );
-    let n_inserted_rows = transaction
-        .execute(query)
-        .await?
-        .rows_affected(); //get the affected rows to see if a conflict happened or not
+    let n_inserted_rows = transaction.execute(query).await?.rows_affected(); //get the affected rows to see if a conflict happened or not
     if n_inserted_rows > 0 {
         Ok(NextAction::StartProcessing(transaction))
     } else {
         let saved_response = get_saved_response(pool, idempotency_key, user_id)
             .await?
-            .ok_or_else(||
-                anyhow::anyhow!("We expected a saved response but didn't find it")    
-            )?;
+            .ok_or_else(|| anyhow::anyhow!("We expected a saved response but didn't find it"))?;
         Ok(NextAction::ReturnSavedResponse(saved_response))
     }
 }

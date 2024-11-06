@@ -33,18 +33,7 @@ impl Application {
         let listener = TcpListener::bind(address)?;
 
         let connection_pool = get_connection_pool(&settings.database_settings);
-
-        let sender_email = settings
-            .email_client_settings
-            .sender()
-            .expect("Invalid sender email address config value");
-        let email_client = EmailClient::new(
-            &settings.email_client_settings.base_url,
-            sender_email,
-            &settings.email_client_settings.authorization_token,
-            settings.email_client_settings.timeout(),
-        );
-
+        let email_client = settings.email_client_settings.clone().client();
         let base_url = settings.application_settings.base_url.as_str();
 
         let port = listener.local_addr().unwrap().port();
